@@ -19,29 +19,33 @@ CompressResult compress(std::span<const int64_t> samples,
 
   auto tform = preprocess::get_transform(mode);
 
+  Timer t;
+  t.start();
   auto buffer = tform.encode(samples);
+  double encode_ms = t.elapsed_ms();
+
+  double H = preprocess::shannon_entropy(buffer);
 
   unsigned int bz2_out_len =
       static_cast<unsigned int>(buffer.size() * 101 / 100 + 600);
   std::vector<uint8_t> out(bz2_out_len);
 
-  Timer t;
-  t.start();
-
+  Timer t2;
+  t2.start();
   int rc = BZ2_bzBuffToBuffCompress(reinterpret_cast<char *>(out.data()),
                                     &bz2_out_len,
                                     reinterpret_cast<char *>(buffer.data()),
                                     static_cast<unsigned int>(buffer.size()),
                                     BLOCK_SIZE, VERBOSITY, WORK_FACTOR);
 
-  double ms = t.elapsed_ms();
+  double compress_ms = t2.elapsed_ms();
 
   if (rc != BZ_OK)
     throw std::runtime_error("BZ2_bzBuffToBuffCompress failed, code=" +
                              std::to_string(rc));
 
   out.resize(bz2_out_len);
-  return {std::move(out), ms};
+  return {std::move(out), compress_ms, encode_ms, H};
 }
 
 DecompressResult decompress(std::span<const uint8_t> data, size_t n_samples,
@@ -52,24 +56,28 @@ DecompressResult decompress(std::span<const uint8_t> data, size_t n_samples,
   const size_t bytes = n_samples * sizeof(int64_t);
   std::vector<uint8_t> buffer(bytes);
 
+  unsigned int out_len = static_cast<unsigned int>(bytes);
+
   Timer t;
   t.start();
-
-  unsigned int out_len = static_cast<unsigned int>(bytes);
 
   int rc = BZ2_bzBuffToBuffDecompress(
       reinterpret_cast<char *>(buffer.data()), &out_len,
       const_cast<char *>(reinterpret_cast<const char *>(data.data())),
       static_cast<unsigned int>(data.size()), 0, VERBOSITY);
 
+  double decompress_ms = t.elapsed_ms();
+
   if (rc != BZ_OK)
     throw std::runtime_error("BZ2_bzBuffToBuffDecompress failed, code=" +
                              std::to_string(rc));
 
+  Timer t2;
+  t2.start();
   auto values = tform.decode(buffer, n_samples);
+  double decode_ms = t2.elapsed_ms();
 
-  double ms = t.elapsed_ms();
-  return {std::move(values), ms};
+  return {std::move(values), decompress_ms, decode_ms};
 }
 
 } // namespace bzip2

@@ -65,7 +65,8 @@ static py::array_t<int64_t> ret_i64(std::vector<int64_t> &&v) {
          preprocess::Mode mode) {                                              \
         auto res = ns::compress(to_i64(arr), mode);                            \
         return py::make_tuple(ret_u8(std::move(res.data)),                     \
-                              res.cpp_compress_ms);                            \
+                              res.cpp_compress_ms, res.encode_ms,              \
+                              res.shannon_entropy);                            \
       },                                                                       \
       py::arg("samples"), py::arg("mode"), "Compress with mode");              \
                                                                                \
@@ -75,7 +76,7 @@ static py::array_t<int64_t> ret_i64(std::vector<int64_t> &&v) {
          size_t n_samples, preprocess::Mode mode) {                            \
         auto res = ns::decompress(to_u8(arr), n_samples, mode);                \
         return py::make_tuple(ret_i64(std::move(res.values)),                  \
-                              res.cpp_decompress_ms);                          \
+                              res.cpp_decompress_ms, res.decode_ms);           \
       },                                                                       \
       py::arg("data"), py::arg("n_samples"), py::arg("mode"),                  \
       "Decompress with mode");

@@ -20,25 +20,28 @@ CompressResult compress(std::span<const int64_t> samples,
 
   Timer t;
   t.start();
-
   std::vector<uint8_t> buffer = tform.encode(samples);
+  double encode_ms = t.elapsed_ms();
+
+  double H = preprocess::shannon_entropy(buffer);
 
   size_t bound = lzma_stream_buffer_bound(buffer.size());
   std::vector<uint8_t> out(bound);
   size_t out_pos = 0;
 
+  Timer t2;
+  t2.start();
   lzma_ret rc =
       lzma_easy_buffer_encode(PRESET, LZMA_CHECK_CRC64, nullptr, buffer.data(),
                               buffer.size(), out.data(), &out_pos, bound);
-
-  double ms = t.elapsed_ms();
+  double compress_ms = t2.elapsed_ms();
 
   if (rc != LZMA_OK)
     throw std::runtime_error("lzma_easy_buffer_encode failed, code=" +
                              std::to_string(rc));
 
   out.resize(out_pos);
-  return {std::move(out), ms};
+  return {std::move(out), compress_ms, encode_ms, H};
 }
 
 DecompressResult decompress(std::span<const uint8_t> data, size_t n_samples,
@@ -59,15 +62,18 @@ DecompressResult decompress(std::span<const uint8_t> data, size_t n_samples,
   lzma_ret rc =
       lzma_stream_buffer_decode(&MEM_LIMIT, 0, nullptr, data.data(), &in_pos,
                                 data.size(), buffer.data(), &out_pos, bytes);
+  double decompress_ms = t.elapsed_ms();
 
   if (rc != LZMA_OK && rc != LZMA_STREAM_END)
     throw std::runtime_error("lzma_stream_buffer_decode failed, code=" +
                              std::to_string(rc));
 
+  Timer t2;
+  t2.start();
   auto values = tform.decode(buffer, n_samples);
+  double decode_ms = t2.elapsed_ms();
 
-  double ms = t.elapsed_ms();
-  return {std::move(values), ms};
+  return {std::move(values), decompress_ms, decode_ms};
 }
 
 } // namespace lzma

@@ -36,9 +36,12 @@ struct Timer {
 struct CompressResult {
   std::vector<uint8_t> data; // compressed bytes
   double cpp_compress_ms;    // time inside C++ only (no Python overhead)
+  double encode_ms;
+  double shannon_entropy;
 };
 
 struct DecompressResult {
   std::vector<int64_t> values; // reconstructed samples
   double cpp_decompress_ms;    // time inside C++ only
+  double decode_ms;
 };

@@ -10,6 +10,7 @@
 // combined with any backend compressor (Zstd, Bzip2, LZMA, etc.).
 //
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <span>
@@ -26,17 +27,52 @@ enum class Mode {
   BYTE_SHUFFLE,
 };
 
+struct Transform {
+  std::vector<uint8_t> (*encode)(std::span<const int64_t>);
+  std::vector<int64_t> (*decode)(std::span<const uint8_t>, size_t n);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Shannon Entropy calculation
+// ═══════════════════════════════════════════════════════════════════════════
+//
+double shannon_entropy(std::span<const uint8_t> data) {
+  if (data.empty())
+    return 0.0;
+
+  // Histogram (256 possible byte values)
+  std::array<size_t, 256> counts{};
+
+  for (uint8_t b : data)
+    counts[b]++;
+
+  const double N = static_cast<double>(data.size());
+
+  double H = 0.0;
+
+  for (size_t c : counts) {
+    if (c == 0)
+      continue;
+
+    double p = c / N;
+    H -= p * std::log2(p);
+  }
+
+  return H; // bits per byte
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  Raw encode
 // ═══════════════════════════════════════════════════════════════════════════
 //
-std::vector<uint8_t> raw_encode(std::span<const int64_t> s) {
+inline std::vector<uint8_t> raw_encode(std::span<const int64_t> s) {
   std::vector<uint8_t> out(s.size() * sizeof(int64_t));
   std::memcpy(out.data(), s.data(), out.size());
   return out;
 }
 
-std::vector<int64_t> raw_decode(std::span<const uint8_t> data, size_t n) {
+inline std::vector<int64_t> raw_decode(std::span<const uint8_t> data,
+                                       size_t n) {
   std::vector<int64_t> out(n);
   std::memcpy(out.data(), data.data(), n * sizeof(int64_t));
   return out;
@@ -63,7 +99,7 @@ std::vector<int64_t> raw_decode(std::span<const uint8_t> data, size_t n) {
 //  ELEM_BYTES is a template parameter so the same code works for int32_t,
 //  float, double etc. if needed in the future.
 //
-std::vector<uint8_t> shuffle_encode(std::span<const int64_t> s) {
+inline std::vector<uint8_t> shuffle_encode(std::span<const int64_t> s) {
   size_t n = s.size();
   size_t B = sizeof(int64_t);
 
@@ -77,7 +113,8 @@ std::vector<uint8_t> shuffle_encode(std::span<const int64_t> s) {
   return out;
 }
 
-std::vector<int64_t> shuffle_decode(std::span<const uint8_t> data, size_t n) {
+inline std::vector<int64_t> shuffle_decode(std::span<const uint8_t> data,
+                                           size_t n) {
   size_t B = sizeof(int64_t);
   std::vector<int64_t> out(n);
 
@@ -102,7 +139,7 @@ std::vector<int64_t> shuffle_decode(std::span<const uint8_t> data, size_t n) {
 //  Best for signals with a slowly changing first derivative (e.g. smoothly
 //  sweeping ECG baselines, linearly drifting sensors).  For step-change
 //  signals it may be worse than plain DPCM.
-std::vector<uint8_t> dod_encode(std::span<const int64_t> s) {
+inline std::vector<uint8_t> dod_encode(std::span<const int64_t> s) {
   size_t n = s.size();
   std::vector<int64_t> d1(n), d2(n);
 
@@ -149,7 +186,7 @@ std::vector<int64_t> dod_decode(std::span<const uint8_t> data, size_t n) {
 //  Works for any linearly correlated integer signal.  The first element is
 //  stored raw so the inverse can reconstruct without any side-channel data.
 //
-std::vector<uint8_t> dpcm_encode(std::span<const int64_t> s) {
+inline std::vector<uint8_t> dpcm_encode(std::span<const int64_t> s) {
   size_t n = s.size();
   std::vector<int64_t> d1(n);
 
@@ -164,7 +201,8 @@ std::vector<uint8_t> dpcm_encode(std::span<const int64_t> s) {
   std::memcpy(out.data(), d1.data(), out.size());
   return out;
 }
-std::vector<int64_t> dpcm_decode(std::span<const uint8_t> data, size_t n) {
+inline std::vector<int64_t> dpcm_decode(std::span<const uint8_t> data,
+                                        size_t n) {
   auto *d1 = reinterpret_cast<const int64_t *>(data.data());
 
   std::vector<int64_t> out(n);
@@ -223,18 +261,7 @@ inline std::vector<int64_t> xor_decode(std::span<const uint8_t> data,
                               reinterpret_cast<int64_t *>(out.data()) + n);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-//
-// Function to get which encode/decode functions to use based on the selected
-// mode.
-//
-struct Transform {
-  std::vector<uint8_t> (*encode)(std::span<const int64_t>);
-  std::vector<int64_t> (*decode)(std::span<const uint8_t>, size_t n);
-};
-
+// Helper to get which encode/decode functions to use
 Transform get_transform(Mode m) {
   switch (m) {
   case Mode::RAW:

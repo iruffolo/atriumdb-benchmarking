@@ -5,14 +5,15 @@
 #pragma once
 #include "codec.hpp"
 #include "preprocess.hpp"
+#include <iostream>
 #include <span>
 #include <zstd.h>
 
 namespace zstd {
 
-static constexpr int ZSTD_LEVEL = 3;
+static constexpr int ZSTD_LEVEL = 19;
 
-CompressResult compress(std::span<const int64_t> samples,
+CompressResult compress(std::span<const int16_t> samples,
                         preprocess::Mode mode) {
 
   auto tform = preprocess::get_transform(mode);
@@ -22,15 +23,16 @@ CompressResult compress(std::span<const int64_t> samples,
   auto buffer = tform.encode(samples);
   double encode_ms = t.elapsed_ms();
 
-  double H = preprocess::shannon_entropy(buffer);
+  double H = preprocess::shannon_entropy_int16(buffer);
 
-  size_t bound = ZSTD_compressBound(buffer.size());
+  size_t buffer_bytes = buffer.size() * sizeof(int16_t);
+  size_t bound = ZSTD_compressBound(buffer_bytes);
   std::vector<uint8_t> out(bound);
 
   Timer t2;
   t2.start();
-  size_t compressed_size = ZSTD_compress(out.data(), bound, buffer.data(),
-                                         buffer.size(), ZSTD_LEVEL);
+  size_t compressed_size =
+      ZSTD_compress(out.data(), bound, buffer.data(), buffer_bytes, ZSTD_LEVEL);
   double compress_ms = t2.elapsed_ms();
 
   if (ZSTD_isError(compressed_size))
@@ -38,6 +40,7 @@ CompressResult compress(std::span<const int64_t> samples,
                              ZSTD_getErrorName(compressed_size));
 
   out.resize(compressed_size);
+
   return {std::move(out), compress_ms, encode_ms, H};
 }
 
@@ -46,8 +49,8 @@ DecompressResult decompress(std::span<const uint8_t> data, size_t n_samples,
 
   auto tform = preprocess::get_transform(mode);
 
-  size_t bytes = n_samples * sizeof(int64_t);
-  std::vector<uint8_t> buffer(bytes);
+  size_t bytes = n_samples * sizeof(int16_t);
+  std::vector<int16_t> buffer(n_samples);
 
   Timer t;
   t.start();

@@ -25,6 +25,7 @@
 
 #include "bzip2.cpp"
 #include "codec.hpp"
+#include "golomb.cpp"
 #include "lzma.cpp"
 #include "preprocess.hpp"
 #include "zstd.cpp"
@@ -32,10 +33,10 @@
 
 namespace py = pybind11;
 
-static std::span<const int64_t>
-to_i64(py::array_t<int64_t, py::array::c_style | py::array::forcecast> a) {
+static std::span<const int16_t>
+to_i16(py::array_t<int16_t, py::array::c_style | py::array::forcecast> a) {
   auto info = a.request();
-  return {static_cast<const int64_t *>(info.ptr),
+  return {static_cast<const int16_t *>(info.ptr),
           static_cast<size_t>(info.size)};
 }
 
@@ -52,18 +53,18 @@ static py::array_t<uint8_t> ret_u8(std::vector<uint8_t> &&v) {
   return out;
 }
 
-static py::array_t<int64_t> ret_i64(std::vector<int64_t> &&v) {
-  py::array_t<int64_t> out(static_cast<py::ssize_t>(v.size()));
-  std::memcpy(out.mutable_data(), v.data(), v.size() * sizeof(int64_t));
+static py::array_t<int16_t> ret_i16(std::vector<int16_t> &&v) {
+  py::array_t<int16_t> out(static_cast<py::ssize_t>(v.size()));
+  std::memcpy(out.mutable_data(), v.data(), v.size() * sizeof(int16_t));
   return out;
 }
 
 #define REGISTER_CODEC(m, ns, name)                                            \
   (m).def(                                                                     \
       name "_compress",                                                        \
-      [](py::array_t<int64_t, py::array::c_style | py::array::forcecast> arr,  \
+      [](py::array_t<int16_t, py::array::c_style | py::array::forcecast> arr,  \
          preprocess::Mode mode) {                                              \
-        auto res = ns::compress(to_i64(arr), mode);                            \
+        auto res = ns::compress(to_i16(arr), mode);                            \
         return py::make_tuple(ret_u8(std::move(res.data)),                     \
                               res.cpp_compress_ms, res.encode_ms,              \
                               res.shannon_entropy);                            \
@@ -75,7 +76,7 @@ static py::array_t<int64_t> ret_i64(std::vector<int64_t> &&v) {
       [](py::array_t<uint8_t, py::array::c_style | py::array::forcecast> arr,  \
          size_t n_samples, preprocess::Mode mode) {                            \
         auto res = ns::decompress(to_u8(arr), n_samples, mode);                \
-        return py::make_tuple(ret_i64(std::move(res.values)),                  \
+        return py::make_tuple(ret_i16(std::move(res.values)),                  \
                               res.cpp_decompress_ms, res.decode_ms);           \
       },                                                                       \
       py::arg("data"), py::arg("n_samples"), py::arg("mode"),                  \
@@ -94,6 +95,7 @@ PYBIND11_MODULE(compression_codecs, m) {
 
   REGISTER_CODEC(m, zstd, "zstd")
   REGISTER_CODEC(m, bzip2, "bzip2")
+  REGISTER_CODEC(m, golomb, "golomb")
   REGISTER_CODEC(m, lzma, "lzma")
   // REGISTER_CODEC(m, alp,            "alp")
 }

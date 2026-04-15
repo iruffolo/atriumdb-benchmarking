@@ -41,7 +41,7 @@ struct CompressResult {
 };
 
 struct DecompressResult {
-  std::vector<int64_t> values; // reconstructed samples
+  std::vector<int16_t> values; // reconstructed samples
   double cpp_decompress_ms;    // time inside C++ only
   double decode_ms;
 };

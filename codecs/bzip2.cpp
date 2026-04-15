@@ -14,7 +14,7 @@ static constexpr int BLOCK_SIZE = 9; // 1-9; matches Python compresslevel=9
 static constexpr int VERBOSITY = 0;
 static constexpr int WORK_FACTOR = 30;
 
-CompressResult compress(std::span<const int64_t> samples,
+CompressResult compress(std::span<const int16_t> samples,
                         preprocess::Mode mode) {
 
   auto tform = preprocess::get_transform(mode);
@@ -24,10 +24,12 @@ CompressResult compress(std::span<const int64_t> samples,
   auto buffer = tform.encode(samples);
   double encode_ms = t.elapsed_ms();
 
-  double H = preprocess::shannon_entropy(buffer);
+  double H = preprocess::shannon_entropy_int16(buffer);
+
+  size_t buffer_bytes = buffer.size() * sizeof(int16_t);
 
   unsigned int bz2_out_len =
-      static_cast<unsigned int>(buffer.size() * 101 / 100 + 600);
+      static_cast<unsigned int>(buffer_bytes * 101 / 100 + 600);
   std::vector<uint8_t> out(bz2_out_len);
 
   Timer t2;
@@ -35,7 +37,7 @@ CompressResult compress(std::span<const int64_t> samples,
   int rc = BZ2_bzBuffToBuffCompress(reinterpret_cast<char *>(out.data()),
                                     &bz2_out_len,
                                     reinterpret_cast<char *>(buffer.data()),
-                                    static_cast<unsigned int>(buffer.size()),
+                                    static_cast<unsigned int>(buffer_bytes),
                                     BLOCK_SIZE, VERBOSITY, WORK_FACTOR);
 
   double compress_ms = t2.elapsed_ms();
@@ -53,8 +55,8 @@ DecompressResult decompress(std::span<const uint8_t> data, size_t n_samples,
 
   auto tform = preprocess::get_transform(mode);
 
-  const size_t bytes = n_samples * sizeof(int64_t);
-  std::vector<uint8_t> buffer(bytes);
+  const size_t bytes = n_samples * sizeof(int16_t);
+  std::vector<int16_t> buffer(n_samples);
 
   unsigned int out_len = static_cast<unsigned int>(bytes);
 

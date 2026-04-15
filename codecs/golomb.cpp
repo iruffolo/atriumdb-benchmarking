@@ -177,7 +177,6 @@ CompressResult compress(std::span<const int16_t> samples,
   double H = preprocess::shannon_entropy_int16(buffer);
 
   const int k = estimate_k(buffer);
-  std::cout << k << std::endl;
 
   std::vector<uint8_t> out;
   out.reserve(n * 3);

@@ -486,8 +486,8 @@ def main():
     # CONFIGURATION  ← only section you need to edit
     # ─────────────────────────────────────────────────────────────────────────────
     DATASET_PATH = "database/"  # output of build_mitdb_dataset.py
-    SAMPLE_DURATION_S = 60  # seconds of signal to pull per segment
-    N_SEGMENTS = 2  # (measure, device) pairs to benchmark
+    SAMPLE_DURATION_S = 60 * 60  # seconds of signal to pull per segment
+    N_SEGMENTS = "all"  # (measure, device) pairs to benchmark
     # MIT-BIH has 48 records × 2 channels
     # = 96 possible pairs; use 'all' for all
     # ─────────────────────────────────────────────────────────────────────────────
